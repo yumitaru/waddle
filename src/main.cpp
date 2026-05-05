@@ -46,6 +46,8 @@ private:
 	vk::raii::Instance instance = nullptr;
 	vk::raii::DebugUtilsMessengerEXT debugMessenger = nullptr;
 	vk::raii::PhysicalDevice physicalDevice = nullptr;
+	vk::raii::Device device = nullptr;
+	vk::raii::Queue graphicsQueue = nullptr;
 
 	void createInstance() {
 		vk::ApplicationInfo appInfo("Hello Triangle",
@@ -134,6 +136,7 @@ private:
 		createInstance();
 		setupDebugMessenger();
 		pickPhysicalDevice();
+		createLogicalDevice();
 
     }
 
@@ -193,6 +196,41 @@ private:
 		debugUtilsMessengerCreateInfoEXT.messageType     = messageTypeFlags;
 		debugUtilsMessengerCreateInfoEXT.pfnUserCallback = &debugCallback;
 		debugMessenger = instance.createDebugUtilsMessengerEXT( debugUtilsMessengerCreateInfoEXT );
+
+	}
+
+	void createLogicalDevice() {
+		std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
+		auto graphicsQueueFamilyProperty = std::ranges::find_if(queueFamilyProperties, [](auto const &qfp) { return (qfp.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0); });
+		auto graphicsIndex = static_cast<uint32_t>(std::distance(queueFamilyProperties.begin(), graphicsQueueFamilyProperty));
+	
+
+		float queuePriority = 0.5f;
+		vk::DeviceQueueCreateInfo deviceQueueCreateInfo { };
+		deviceQueueCreateInfo.queueFamilyIndex = graphicsIndex;
+		deviceQueueCreateInfo.queueCount = 1;
+		deviceQueueCreateInfo.pQueuePriorities = &queuePriority;
+
+		vk::PhysicalDeviceFeatures deviceFeatures;
+
+		// Create a chain of feature structures
+		vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> featureChain = {};
+		
+			featureChain.get<vk::PhysicalDeviceVulkan13Features>()
+    			.dynamicRendering = VK_TRUE;   // Enable dynamic rendering from Vulkan 1.3
+			featureChain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>()
+				.extendedDynamicState = VK_TRUE;  // Enable extended dynamic state from the extension
+
+		vk::DeviceCreateInfo deviceCreateInfo{};
+		deviceCreateInfo.pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>();
+		deviceCreateInfo.queueCreateInfoCount = 1;
+		deviceCreateInfo.pQueueCreateInfos = &deviceQueueCreateInfo;
+		deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(requiredDeviceExtension.size());
+		deviceCreateInfo.ppEnabledExtensionNames = requiredDeviceExtension.data();
+
+		device = vk::raii::Device( physicalDevice, deviceCreateInfo );
+		
+		graphicsQueue = vk::raii::Queue( device, graphicsIndex, 0 );
 
 	}
 
